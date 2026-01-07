@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  
+    <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    
+    <!-- Primary Meta Tags -->
+    <title>Her Health - Premium Pregnancy Tracker & Journey Companion</title>
+    <meta name="title" content="Her Health - Premium Pregnancy Tracker & Journey Companion" />
+    <meta name="description" content="Her Health is your premium companion for the pregnancy journey. Track every milestone, monitor baby development, and access professional tools for a healthy, joyful pregnancy." />
+    <meta name="keywords" content="pregnancy tracker, her health, premium pregnancy app, baby development, maternity health, prenatal tracker" />
+    <meta name="author" content="During Pregnancy Tracker" />
+    <meta name="robots" content="index, follow" />
+    <meta name="language" content="English" />
+    <link rel="canonical" href="https://duringpregnancytracker.com/" />
+    
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#ec4899" />
+    <meta name="msapplication-navbutton-color" content="#ec4899" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="#ec4899" />
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://duringpregnancytracker.com/" />
+    <meta property="og:title" content="During Pregnancy Tracker - Free Pregnancy Week by Week Tracker & Due Date Calculator" />
+    <meta property="og:description" content="Track your pregnancy journey week by week with our free pregnancy tracker. Monitor baby development, due date, weight, BMI, kick counter, contraction timer, and symptoms." />
+    <meta property="og:site_name" content="During Pregnancy Tracker" />
+    <meta property="og:locale" content="en_US" />
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://duringpregnancytracker.com/" />
+    <meta name="twitter:title" content="During Pregnancy Tracker - Free Pregnancy Week by Week Tracker" />
+    <meta name="twitter:description" content="Track your pregnancy journey week by week. Monitor baby development, weight, BMI, kicks, contractions & more. Complete pregnancy tracking tools in one place." />
+    
+    <!-- Structured Data - WebApplication Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "During Pregnancy Tracker",
+      "description": "Free pregnancy tracking application to monitor pregnancy week by week, baby development, due date, weight, BMI, kick counter, and contraction timer.",
+      "url": "https://duringpregnancytracker.com/",
+      "applicationCategory": "HealthApplication",
+      "operatingSystem": "Web Browser",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "1250"
+      },
+      "featureList": [
+        "Week by week pregnancy tracking",
+        "Due date calculator",
+        "Baby development tracker",
+        "Weight tracker",
+        "BMI calculator",
+        "Kick counter",
+        "Contraction timer",
+        "Pregnancy symptoms tracker",
+        "Trimester information"
+      ]
+    }
+    </script>
+    
+    <!-- Structured Data - Organization Schema -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "During Pregnancy Tracker",
+      "url": "https://duringpregnancytracker.com/",
+      "logo": "https://duringpregnancytracker.com/logo.png",
+      "description": "Comprehensive pregnancy tracking platform helping expectant mothers monitor their pregnancy journey",
+      "sameAs": []
+    }
+    </script>
+  </head>
+
+  <body>
+    <!-- Polyfill for Promise.withResolvers (for older mobile browsers) -->
+    <script>
+      if (!Promise.withResolvers) {
+        Promise.withResolvers = function() {
+          let resolve, reject;
+          const promise = new Promise((res, rej) => {
+            resolve = res;
+            reject = rej;
+          });
+          return { promise, resolve, reject };
+        };
+      }
+    </script>
+    
+    <div id="root"></div>
+    <!-- IMPORTANT: DO NOT REMOVE THIS SCRIPT TAG OR THIS VERY COMMENT! -->
+    <script src="https://cdn.gpteng.co/gptengineer.js" type="module"></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
