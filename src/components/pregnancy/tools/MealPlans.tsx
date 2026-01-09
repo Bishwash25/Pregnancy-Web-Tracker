@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft,
   Utensils,
@@ -13,8 +14,11 @@ import {
   ChevronDown,
   Clock,
   Sparkles,
-  Search
+  Search,
+  ChefHat,
+  Loader2
 } from "lucide-react";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,34 +35,47 @@ interface PregnancyData {
   lastPeriodDate?: Timestamp | Date | null;
 }
 
-interface Meal {
-  name: string;
-  description: string;
-  nutrients: string[];
-  recipe?: string;
-}
-
-interface DailyMeal {
-  breakfast: Meal;
-  lunch: Meal;
-  dinner: Meal;
-  snacks: Meal[];
-}
-
 interface NutritionTips {
   [key: string]: string;
 }
 
-type ViewMode = "tips" | "mealPlan";
+interface DailyMealPlan {
+  breakfast: {
+    name: string;
+    instructions: string;
+    nutrients: string[];
+  };
+  lunch: {
+    name: string;
+    instructions: string;
+    nutrients: string[];
+  };
+  dinner: {
+    name: string;
+    instructions: string;
+    nutrients: string[];
+  };
+  snacks: {
+    name: string;
+    instructions: string;
+    nutrients: string[];
+  };
+  ingredient_nutrients: {
+    [key: string]: string[];
+  };
+}
+
+type ViewMode = "tips" | "customMeal";
 type Step = "intro" | "analyzing" | "content";
 
 export default function MealPlans({ onBack }: { onBack: () => void }) {
   const [step, setStep] = useState<Step>("intro");
-  const [activeTab, setActiveTab] = useState("trimester1");
   const [currentWeek, setCurrentWeek] = useState<number>(0);
   const [currentTrimester, setCurrentTrimester] = useState<number>(1);
-  const [showRecipe, setShowRecipe] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("tips");
+  const [ingredients, setIngredients] = useState<string>("");
+  const [generatedMeal, setGeneratedMeal] = useState<DailyMealPlan | null>(null);
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const { user } = useFirebaseAuth();
 
   useEffect(() => {
@@ -82,13 +99,10 @@ export default function MealPlans({ onBack }: { onBack: () => void }) {
     const updateTrimester = (weeks: number) => {
       if (weeks < 13) {
         setCurrentTrimester(1);
-        setActiveTab("trimester1");
       } else if (weeks <= 27) {
         setCurrentTrimester(2);
-        setActiveTab("trimester2");
       } else {
         setCurrentTrimester(3);
-        setActiveTab("trimester3");
       }
     };
 
@@ -121,7 +135,7 @@ export default function MealPlans({ onBack }: { onBack: () => void }) {
     }
 
     const storedViewMode = localStorage.getItem("mealPlansViewMode");
-    if (storedViewMode && ["tips", "mealPlan"].includes(storedViewMode)) {
+    if (storedViewMode && ["tips", "customMeal"].includes(storedViewMode)) {
       setViewMode(storedViewMode as ViewMode);
     }
   }, [user?.uid]);
@@ -180,174 +194,102 @@ export default function MealPlans({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const mealPlans: Record<string, DailyMeal[]> = {
-    trimester1: [
-      {
-        breakfast: {
-          name: "Ginger Oatmeal with Berries",
-          description: "Steel-cut oats topped with fresh berries, a drizzle of honey, and a sprinkle of ginger to help with morning sickness.",
-          nutrients: ["Fiber", "Antioxidants", "Vitamin C", "Iron"],
-          recipe: "Ingredients:\n- 1/2 cup steel-cut oats\n- 1 cup water\n- 1/2 cup milk of choice\n- 1/4 tsp ground ginger\n- 1 tbsp honey\n- 1/2 cup mixed berries\n\nInstructions:\n1. Combine oats, water, and milk in a pot. Bring to a boil, then reduce heat.\n2. Simmer for 15-20 minutes, stirring occasionally until creamy.\n3. Stir in ground ginger.\n4. Transfer to a bowl, drizzle with honey, and top with fresh berries."
-        },
-        lunch: {
-          name: "Lentil Soup with Whole Grain Bread",
-          description: "A hearty lentil soup packed with vegetables, served with a slice of whole grain bread.",
-          nutrients: ["Protein", "Folate", "Iron", "Fiber"],
-          recipe: "Ingredients:\n- 1 cup red lentils\n- 1 onion, diced\n- 2 carrots, diced\n- 2 celery stalks, diced\n- 2 garlic cloves, minced\n- 4 cups vegetable broth\n- 1 tsp cumin\n- 1/2 tsp turmeric\n- Salt and pepper to taste\n- 1 slice whole grain bread\n\nInstructions:\n1. Rinse lentils thoroughly.\n2. In a pot, sauté onion, carrots, celery, and garlic until softened.\n3. Add lentils, broth, and spices. Bring to a boil, then simmer for 25 minutes.\n4. Blend partially for creamier texture if desired.\n5. Serve with whole grain bread."
-        },
-        dinner: {
-          name: "Baked Salmon with Quinoa and Steamed Broccoli",
-          description: "Omega-3 rich salmon fillet baked with lemon and herbs, served with quinoa and steamed broccoli.",
-          nutrients: ["Omega-3 Fatty Acids", "Protein", "Calcium", "Iron", "Vitamin B12"],
-          recipe: "Ingredients:\n- 4 oz salmon fillet\n- 1/2 cup quinoa\n- 1 cup water\n- 1 cup broccoli florets\n- 1 lemon, sliced\n- 2 sprigs fresh dill\n- 1 tbsp olive oil\n- Salt and pepper to taste\n\nInstructions:\n1. Preheat oven to 375°F (190°C).\n2. Place salmon on a baking sheet, drizzle with olive oil, top with lemon slices and dill.\n3. Bake for 15-18 minutes until salmon flakes easily.\n4. Meanwhile, rinse quinoa and cook with water according to package instructions.\n5. Steam broccoli until tender-crisp, about 5 minutes.\n6. Serve salmon with quinoa and broccoli."
-        },
-        snacks: [
-          {
-            name: "Apple Slices with Almond Butter",
-            description: "Fresh apple slices served with a tablespoon of almond butter for protein and healthy fats.",
-            nutrients: ["Fiber", "Healthy Fats", "Vitamin E"]
-          },
-          {
-            name: "Greek Yogurt with Honey",
-            description: "Plain Greek yogurt drizzled with honey for a protein-rich snack to combat nausea.",
-            nutrients: ["Protein", "Calcium", "Probiotics"]
-          }
-        ]
-      }
-    ],
-    trimester2: [
-      {
-        breakfast: {
-          name: "Avocado Toast with Egg",
-          description: "Whole grain toast topped with mashed avocado, a poached egg, and a sprinkle of hemp seeds.",
-          nutrients: ["Healthy Fats", "Protein", "Fiber", "Vitamin E"],
-          recipe: "Ingredients:\n- 1 slice whole grain bread\n- 1/2 ripe avocado\n- 1 egg\n- 1 tsp hemp seeds\n- Salt and pepper to taste\n- Red pepper flakes (optional)\n\nInstructions:\n1. Toast the bread until golden brown.\n2. Meanwhile, bring a small pot of water to a gentle simmer for poaching the egg.\n3. Add a splash of vinegar to the water, create a gentle whirlpool, and crack egg into the center.\n4. Poach for 3-4 minutes for a runny yolk.\n5. Mash avocado and spread on toast. Season with salt and pepper.\n6. Top with poached egg, sprinkle with hemp seeds and red pepper flakes if using."
-        },
-        lunch: {
-          name: "Grilled Chicken and Vegetable Wrap",
-          description: "Whole grain wrap filled with grilled chicken, mixed salad greens, bell peppers, and hummus.",
-          nutrients: ["Protein", "Fiber", "Vitamin C", "Iron"],
-          recipe: "Ingredients:\n- 1 whole grain wrap\n- 4 oz grilled chicken breast, sliced\n- 1 cup mixed salad greens\n- 1/4 bell pepper, sliced\n- 2 tbsp hummus\n- 1 tsp olive oil\n- 1 tsp lemon juice\n- Salt and pepper to taste\n\nInstructions:\n1. Warm wrap slightly to make it more pliable.\n2. Spread hummus over the center of the wrap.\n3. Top with chicken, greens, and bell pepper.\n4. Drizzle with olive oil and lemon juice, season with salt and pepper.\n5. Fold in sides and roll up tightly.\n6. Cut in half and serve."
-        },
-        dinner: {
-          name: "Shrimp and Vegetable Stir-Fry with Brown Rice",
-          description: "Shrimp stir-fried with a colorful mix of vegetables, served over brown rice.",
-          nutrients: ["Protein", "Iron", "Zinc", "B Vitamins", "Fiber"],
-          recipe: "Ingredients:\n- 4 oz shrimp, peeled and deveined\n- 1/2 cup brown rice\n- 1 cup mixed vegetables (broccoli, carrots, snap peas)\n- 1 garlic clove, minced\n- 1 tsp ginger, grated\n- 1 tbsp low-sodium soy sauce\n- 1 tsp sesame oil\n- 1 tbsp vegetable oil\n- 1 green onion, sliced (for garnish)\n\nInstructions:\n1. Cook brown rice according to package instructions.\n2. Heat vegetable oil in a wok or large pan over high heat.\n3. Add garlic and ginger, stir-fry for 30 seconds.\n4. Add vegetables, stir-fry for 3-4 minutes until crisp-tender.\n5. Add shrimp, cook for 2-3 minutes until pink and opaque.\n6. Add soy sauce and sesame oil, toss to coat.\n7. Serve over brown rice, garnish with green onion."
-        },
-        snacks: [
-          {
-            name: "Hummus with Vegetable Sticks",
-            description: "Homemade or store-bought hummus served with carrot, cucumber, and bell pepper sticks.",
-            nutrients: ["Protein", "Fiber", "Vitamin A", "Vitamin C"]
-          },
-          {
-            name: "Banana Smoothie",
-            description: "A smoothie made with banana, milk, yogurt, and a tablespoon of nut butter.",
-            nutrients: ["Potassium", "Calcium", "Protein", "Vitamin D"]
-          }
-        ]
-      }
-    ],
-    trimester3: [
-      {
-        breakfast: {
-          name: "Chia Seed Pudding with Berries",
-          description: "Chia seeds soaked in almond milk overnight, topped with mixed berries and a sprinkle of granola.",
-          nutrients: ["Omega-3 Fatty Acids", "Fiber", "Calcium", "Protein"],
-          recipe: "Ingredients:\n- 2 tbsp chia seeds\n- 1/2 cup almond milk\n- 1/2 tsp vanilla extract\n- 1 tsp honey or maple syrup\n- 1/4 cup mixed berries\n- 1 tbsp granola\n\nInstructions:\n1. Mix chia seeds, almond milk, vanilla, and sweetener in a jar or container.\n2. Stir well, then refrigerate overnight or for at least 4 hours.\n3. When ready to eat, stir again and top with berries and granola."
-        },
-        lunch: {
-          name: "Tuna Salad Sandwich with Vegetable Soup",
-          description: "Whole grain bread with tuna salad made with Greek yogurt instead of mayo, served with a cup of vegetable soup.",
-          nutrients: ["Protein", "Omega-3 Fatty Acids", "Fiber", "Antioxidants"],
-          recipe: "Ingredients:\n- 3 oz canned tuna in water, drained\n- 2 tbsp Greek yogurt\n- 1 tbsp diced celery\n- 1 tbsp diced red onion\n- 1 tsp lemon juice\n- 2 slices whole grain bread\n- Lettuce leaf\n- 1 cup vegetable soup (homemade or low-sodium store-bought)\n- Salt and pepper to taste\n\nInstructions:\n1. In a bowl, mix tuna, Greek yogurt, celery, red onion, lemon juice, salt, and pepper.\n2. Toast bread if desired.\n3. Assemble sandwich with lettuce and tuna mixture.\n4. Serve with a cup of warmed vegetable soup."
-        },
-        dinner: {
-          name: "Turkey Meatballs with Whole Wheat Pasta and Tomato Sauce",
-          description: "Lean turkey meatballs served with whole wheat pasta and a vegetable-rich tomato sauce.",
-          nutrients: ["Protein", "Iron", "Fiber", "Vitamin C"],
-          recipe: "Ingredients:\n- 4 oz lean ground turkey\n- 1 tbsp breadcrumbs\n- 1 tbsp grated parmesan cheese\n- 1 small garlic clove, minced\n- 1 tbsp fresh parsley, chopped\n- 1/2 cup whole wheat pasta\n- 1/2 cup tomato sauce\n- 1/4 cup each diced carrot, zucchini, and bell pepper\n- 1 tsp olive oil\n- Salt and pepper to taste\n\nInstructions:\n1. Mix ground turkey, breadcrumbs, parmesan, garlic, parsley, salt, and pepper.\n2. Form into small meatballs.\n3. Heat olive oil in a pan over medium heat.\n4. Cook meatballs for 8-10 minutes, turning occasionally, until cooked through.\n5. In another pan, sauté diced vegetables until tender.\n6. Add tomato sauce to vegetables and simmer for 5 minutes.\n7. Meanwhile, cook pasta according to package instructions.\n8. Serve meatballs and sauce over pasta."
-        },
-        snacks: [
-          {
-            name: "Mixed Nuts and Dried Fruits",
-            description: "A handful of mixed nuts and dried fruits for energy and nutrients.",
-            nutrients: ["Healthy Fats", "Protein", "Iron", "Fiber"]
-          },
-          {
-            name: "Smoothie Bowl",
-            description: "A thick smoothie made with spinach, banana, almond milk, and topped with granola and seeds.",
-            nutrients: ["Iron", "Potassium", "Fiber", "Antioxidants"]
-          }
-        ]
-      }
-    ]
-  };
+
 
   const startAnalysis = () => {
     setStep("analyzing");
     setTimeout(() => setStep("content"), 2000);
   };
 
-  const getCurrentDayOfWeek = () => new Date().getDay();
+  const generateMeal = async () => {
+    if (!ingredients.trim()) return;
 
-  const getCurrentDayMealPlan = () => {
-    const dayOfWeek = getCurrentDayOfWeek();
-    const currentTrimesterMeals = mealPlans[activeTab] || mealPlans.trimester1;
-    return currentTrimesterMeals[dayOfWeek] || currentTrimesterMeals[0];
+    setIsGenerating(true);
+    try {
+      const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY!);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+      const prompt = `You are a maternal nutrition expert and registered dietitian.
+
+Create a pregnancy-safe daily meal plan using ONLY the following ingredients:
+${ingredients}
+
+The meal plan must include:
+1. Breakfast
+2. Lunch
+3. Dinner
+4. Snacks
+
+STRICT REQUIREMENTS:
+- Use ONLY the listed ingredients
+- Avoid pregnancy-unsafe foods (raw fish, undercooked eggs, unpasteurized dairy, high-mercury fish, excessive caffeine)
+- Ensure balanced nutrition suitable for pregnancy
+- Keep instructions simple and easy to follow
+- No medical claims, only nutritional guidance
+
+For EACH meal, provide:
+- Recipe name
+- Step-by-step cooking instructions
+- Key pregnancy-relevant nutrients
+
+Additionally, provide a nutrient breakdown for EACH INDIVIDUAL INGREDIENT used, highlighting:
+- Macronutrients (protein, carbohydrates, fats)
+- Key micronutrients relevant to pregnancy (folate, iron, calcium, iodine, vitamin D, vitamin B12, fiber, omega-3 if applicable)
+
+OUTPUT FORMAT:
+Respond with VALID JSON ONLY. Do not include explanations, markdown, or extra text.
+
+Use the following JSON structure exactly:
+
+{
+  "breakfast": {
+    "name": "Recipe Name",
+    "instructions": "Step-by-step instructions",
+    "nutrients": ["Nutrient1", "Nutrient2"]
+  },
+  "lunch": {
+    "name": "Recipe Name",
+    "instructions": "Step-by-step instructions",
+    "nutrients": ["Nutrient1", "Nutrient2"]
+  },
+  "dinner": {
+    "name": "Recipe Name",
+    "instructions": "Step-by-step instructions",
+    "nutrients": ["Nutrient1", "Nutrient2"]
+  },
+  "snacks": {
+    "name": "Recipe Name",
+    "instructions": "Step-by-step instructions",
+    "nutrients": ["Nutrient1", "Nutrient2"]
+  },
+  "ingredient_nutrients": {
+    "Ingredient Name": ["Nutrient1", "Nutrient2", "Nutrient3"],
+    "Ingredient Name 2": ["Nutrient1", "Nutrient2"]
+  }
+}
+`;
+
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      let text = response.text();
+      console.log(response)
+
+      // Clean the response text to extract JSON
+      text = text.trim();
+      if (text.startsWith('```json')) {
+        text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+      }
+
+      // Parse the JSON response
+      const mealData = JSON.parse(text.trim());
+      setGeneratedMeal(mealData);
+    } catch (error) {
+      console.error("Error generating meal:", error);
+      // You could add error handling UI here
+    } finally {
+      setIsGenerating(false);
+    }
   };
-
-  const renderMeal = (meal: Meal, title: string) => (
-    <div className="group relative p-6 rounded-3xl bg-white border-2 border-gray-50 hover:border-pink-100 hover:shadow-xl hover:shadow-pink-500/5 transition-all duration-300">
-      <div className="flex items-start justify-between mb-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-pink-50 text-pink-600">
-              <Clock className="h-4 w-4" />
-            </div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{title}</p>
-          </div>
-          <h3 className="text-xl font-black text-gray-900 leading-tight">{meal.name}</h3>
-        </div>
-        {meal.recipe && (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="rounded-full h-8 px-4 text-[10px] font-black uppercase tracking-widest bg-gray-50 hover:bg-pink-500 hover:text-white transition-colors"
-            onClick={() => setShowRecipe(showRecipe === `${title}-${meal.name}` ? null : `${title}-${meal.name}`)}
-          >
-            {showRecipe === `${title}-${meal.name}` ? "Hide" : "Recipe"}
-          </Button>
-        )}
-      </div>
-
-      <p className="text-sm text-gray-600 font-medium leading-relaxed mb-4">{meal.description}</p>
-
-      <AnimatePresence>
-        {showRecipe === `${title}-${meal.name}` && meal.recipe && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="mb-4 bg-gray-50 p-5 rounded-2xl text-xs font-medium text-gray-700 leading-relaxed border border-gray-100 whitespace-pre-line">
-              {meal.recipe}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="flex flex-wrap gap-2">
-        {meal.nutrients.map((nutrient, index) => (
-          <Badge key={index} variant="secondary" className="bg-pink-50 text-pink-600 text-[10px] font-bold uppercase tracking-tight py-1 px-3 rounded-lg border-0">
-            {nutrient}
-          </Badge>
-        ))}
-      </div>
-    </div>
-  );
 
   const containerVariants = {
     hidden: { opacity: 0, y: 20 },
@@ -475,7 +417,7 @@ export default function MealPlans({ onBack }: { onBack: () => void }) {
                     className="h-12 px-6 bg-white text-gray-900 border-2 border-gray-100 font-bold rounded-2xl shadow-sm hover:border-orange-500 hover:text-orange-600 transition-all duration-200 min-w-[200px]"
                   >
                     <Search className="mr-2 h-4 w-4" />
-                    {viewMode === 'tips' ? 'Nutrition Tips' : 'Weekly Meal Plan'}
+                    {viewMode === 'tips' ? 'Nutrition Tips' : 'Custom Meal Generator'}
                     <ChevronDown className="ml-2 h-4 w-4 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -486,11 +428,12 @@ export default function MealPlans({ onBack }: { onBack: () => void }) {
                   >
                     <Info className="h-4 w-4" /> Nutrition Tips
                   </DropdownMenuItem>
+
                   <DropdownMenuItem
-                    onClick={() => setViewMode('mealPlan')}
+                    onClick={() => setViewMode('customMeal')}
                     className="flex items-center gap-3 px-4 py-3 text-sm font-bold text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded-xl cursor-pointer transition-colors"
                   >
-                    <Utensils className="h-4 w-4" /> Weekly Meal Plan
+                    <ChefHat className="h-4 w-4" /> Custom Meal Generator
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -562,47 +505,190 @@ export default function MealPlans({ onBack }: { onBack: () => void }) {
               </div>
             )}
 
-            {viewMode === "mealPlan" && (
-              <div className="space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-6">
-                    {renderMeal(getCurrentDayMealPlan().breakfast, "Breakfast")}
-                    {renderMeal(getCurrentDayMealPlan().lunch, "Lunch")}
-                  </div>
-                  <div className="space-y-6">
-                    {renderMeal(getCurrentDayMealPlan().dinner, "Dinner")}
 
-                    <Card className="border-0 shadow-2xl rounded-[2.5rem] bg-slate-900 text-white overflow-hidden">
-                      <CardContent className="p-8 space-y-6">
-                        <div className="flex items-center gap-3">
-                          <div className="p-3 rounded-2xl bg-white/10">
-                            <Sparkles className="h-6 w-6 text-orange-400" />
-                          </div>
-                          <h3 className="text-xl font-black uppercase tracking-tight">Healthy Snacks</h3>
-                        </div>
-                        <div className="space-y-4">
-                          {getCurrentDayMealPlan().snacks.map((snack, index) => (
-                            <motion.div
-                              key={index}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              transition={{ delay: index * 0.1 }}
-                              className="p-5 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors"
-                            >
-                              <p className="text-sm font-black text-orange-400 uppercase tracking-widest mb-1">{snack.name}</p>
-                              <p className="text-sm font-medium text-white/80 leading-relaxed mb-3">{snack.description}</p>
-                              <div className="flex flex-wrap gap-2">
-                                {snack.nutrients.map((n, i) => (
-                                  <span key={i} className="text-[9px] font-black bg-white/10 px-2 py-1 rounded-md uppercase tracking-tighter">{n}</span>
-                                ))}
-                              </div>
-                            </motion.div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
+
+            {viewMode === "customMeal" && (
+              <div className="space-y-8">
+                <Card className="border-0 shadow-2xl rounded-[2.5rem] overflow-hidden">
+                  <div className="bg-gradient-to-br from-purple-500 to-pink-500 p-8 text-white">
+                    <ChefHat className="h-10 w-10 mb-4 opacity-80" />
+                    <h3 className="text-2xl font-black uppercase tracking-tight mb-2">Custom Meal Generator</h3>
+                    <p className="text-white/80 font-medium">Create personalized recipes based on your available ingredients</p>
                   </div>
-                </div>
+                  <CardContent className="p-8 space-y-6 bg-white">
+                    <div className="space-y-4">
+                      <label className="text-sm font-black text-gray-700 uppercase tracking-widest">
+                        Available Ingredients
+                      </label>
+                      <Textarea
+                        value={ingredients}
+                        onChange={(e) => setIngredients(e.target.value)}
+                        placeholder="Enter ingredients you have available (e.g., chicken, rice, broccoli, garlic, olive oil)"
+                        className="min-h-[120px] resize-none rounded-2xl border-2 border-gray-100 focus:border-purple-500 focus:ring-purple-500"
+                      />
+                      <Button
+                        onClick={generateMeal}
+                        disabled={!ingredients.trim() || isGenerating}
+                        className="w-full h-14 text-lg font-semibold rounded-2xl bg-purple-600 hover:bg-purple-700 shadow-xl transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isGenerating ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            Generating Recipe...
+                          </>
+                        ) : (
+                          <>
+                            <ChefHat className="mr-2 h-5 w-5" />
+                            Generate Meal
+                          </>
+                        )}
+                      </Button>
+                    </div>
+
+                    {generatedMeal && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="mt-8 space-y-6"
+                      >
+                        <h4 className="text-2xl font-black text-gray-900 text-center">Your Daily Meal Plan</h4>
+
+                        {/* Breakfast */}
+                        <div className="p-6 rounded-3xl bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-100">
+                          <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-2xl bg-purple-100 text-purple-600">
+                              <ChefHat className="h-6 w-6" />
+                            </div>
+                            <div className="flex-1 space-y-4">
+                              <h5 className="text-xl font-black text-gray-900">Breakfast: {generatedMeal.breakfast.name}</h5>
+                              <div className="space-y-3">
+                                <div>
+                                  <h6 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">Instructions</h6>
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{generatedMeal.breakfast.instructions}</p>
+                                </div>
+                                <div>
+                                  <h6 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">Key Nutrients</h6>
+                                  <div className="flex flex-wrap gap-2">
+                                    {generatedMeal.breakfast.nutrients.map((nutrient, index) => (
+                                      <Badge key={index} variant="secondary" className="bg-purple-100 text-purple-700 text-xs font-bold uppercase tracking-tight py-1 px-3 rounded-lg border-0">
+                                        {nutrient}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Lunch */}
+                        <div className="p-6 rounded-3xl bg-gradient-to-br from-green-50 to-teal-50 border-2 border-green-100">
+                          <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-2xl bg-green-100 text-green-600">
+                              <ChefHat className="h-6 w-6" />
+                            </div>
+                            <div className="flex-1 space-y-4">
+                              <h5 className="text-xl font-black text-gray-900">Lunch: {generatedMeal.lunch.name}</h5>
+                              <div className="space-y-3">
+                                <div>
+                                  <h6 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">Instructions</h6>
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{generatedMeal.lunch.instructions}</p>
+                                </div>
+                                <div>
+                                  <h6 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">Key Nutrients</h6>
+                                  <div className="flex flex-wrap gap-2">
+                                    {generatedMeal.lunch.nutrients.map((nutrient, index) => (
+                                      <Badge key={index} variant="secondary" className="bg-green-100 text-green-700 text-xs font-bold uppercase tracking-tight py-1 px-3 rounded-lg border-0">
+                                        {nutrient}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Dinner */}
+                        <div className="p-6 rounded-3xl bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-100">
+                          <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-2xl bg-blue-100 text-blue-600">
+                              <ChefHat className="h-6 w-6" />
+                            </div>
+                            <div className="flex-1 space-y-4">
+                              <h5 className="text-xl font-black text-gray-900">Dinner: {generatedMeal.dinner.name}</h5>
+                              <div className="space-y-3">
+                                <div>
+                                  <h6 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">Instructions</h6>
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{generatedMeal.dinner.instructions}</p>
+                                </div>
+                                <div>
+                                  <h6 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">Key Nutrients</h6>
+                                  <div className="flex flex-wrap gap-2">
+                                    {generatedMeal.dinner.nutrients.map((nutrient, index) => (
+                                      <Badge key={index} variant="secondary" className="bg-blue-100 text-blue-700 text-xs font-bold uppercase tracking-tight py-1 px-3 rounded-lg border-0">
+                                        {nutrient}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Snacks */}
+                        <div className="p-6 rounded-3xl bg-gradient-to-br from-yellow-50 to-orange-50 border-2 border-yellow-100">
+                          <div className="flex items-start gap-4">
+                            <div className="p-3 rounded-2xl bg-yellow-100 text-yellow-600">
+                              <ChefHat className="h-6 w-6" />
+                            </div>
+                            <div className="flex-1 space-y-4">
+                              <h5 className="text-xl font-black text-gray-900">Snacks: {generatedMeal.snacks.name}</h5>
+                              <div className="space-y-3">
+                                <div>
+                                  <h6 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">Instructions</h6>
+                                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{generatedMeal.snacks.instructions}</p>
+                                </div>
+                                <div>
+                                  <h6 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">Key Nutrients</h6>
+                                  <div className="flex flex-wrap gap-2">
+                                    {generatedMeal.snacks.nutrients.map((nutrient, index) => (
+                                      <Badge key={index} variant="secondary" className="bg-yellow-100 text-yellow-700 text-xs font-bold uppercase tracking-tight py-1 px-3 rounded-lg border-0">
+                                        {nutrient}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Ingredient Nutrients */}
+                        <div className="p-6 rounded-3xl bg-gradient-to-br from-gray-50 to-slate-50 border-2 border-gray-100">
+                          <h5 className="text-xl font-black text-gray-900 mb-4">Ingredient Nutrient Breakdown</h5>
+                          <div className="space-y-3">
+                            {Object.entries(generatedMeal.ingredient_nutrients).map(([ingredient, nutrients], index) => (
+                              <div key={index} className="flex items-start gap-4">
+                                <div className="p-2 rounded-xl bg-gray-100 text-gray-600 font-bold text-sm">
+                                  {ingredient}
+                                </div>
+                                <div className="flex flex-wrap gap-2 flex-1">
+                                  {nutrients.map((nutrient, idx) => (
+                                    <Badge key={idx} variant="secondary" className="bg-gray-100 text-gray-700 text-xs font-bold uppercase tracking-tight py-1 px-3 rounded-lg border-0">
+                                      {nutrient}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </CardContent>
+                </Card>
 
                 <div className="flex justify-center pt-8">
                   <Button
@@ -621,7 +707,7 @@ export default function MealPlans({ onBack }: { onBack: () => void }) {
   );
 }
 
-function AlertCircle(props: any) {
+function AlertCircle(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
       {...props}
